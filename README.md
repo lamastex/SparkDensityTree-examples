@@ -6,7 +6,7 @@ Johannes Graner, Raazesh Sainudiin and Axel Sandstedt
 
 Notebooks showcasing results using sparkDensityTree
 
-## Introduction and Usage
+## Introduction and Usage Notebooks
 
 This project was supported by Combient Mix AB through 2023 summer internship in Data Engineering Sciences to Axel Sandstedt.
 
