@@ -2,10 +2,6 @@
 // MAGIC %md
 // MAGIC ## Distributed Computation of Minimum Distance Histograms
 // MAGIC
-// MAGIC Johannes Graner, Raazesh Sainudiin and Axel Sandstedt
-// MAGIC
-// MAGIC 2022, 2023 Uppsala, Sweden
-// MAGIC
 // MAGIC This project was supported by Combient Mix AB through 2023 summer internship in Data Engineering Sciences to Axel Sandstedt.
 // MAGIC
 // MAGIC This Notebook sets out to give a introduction and guide for how to use the [**SparkDensityTree**](https://github.com/lamastex/SparkDensityTree) estimator, a histogram estimator with performance guarantees for any density \\(f\\). For any details regarding the
