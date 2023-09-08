@@ -15,3 +15,13 @@ For an introduction and a guide to the latest version of the estimator, see note
 - [SparkDensityTree-Introduction](notebooks/SparkDensityTree-Introduction.md)
 
 - [SparkDensityTree-Regression-Analysis-Tools](notebooks/SparkDensityTree-Regression-Analysis-Tools.md)
+
+
+## Support
+
+- This work was initiated with support from project CORCON: Correctness by
+Construction, Seventh Framework Programme of the European Union, Marie
+Curie Actions-People, International Research Staff Exchange Scheme (IRSES)
+with counter-part funding from the Royal Society of New Zealand. 
+- Combient Competence Centre for Data Engineering Sciences.
+- This research was partially supported by the Wallenberg AI, Autonomous Systems and Software Program funded by Knut and Alice Wallenberg Foundation and Databricks University Alliance with infrastructure credits from AWS.
