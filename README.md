@@ -12,9 +12,8 @@ This project was supported by Combient Mix AB through 2023 summer internship in 
 
 For an introduction and a guide to the latest version of the estimator, see notebooks
 
-- [SparkDensityTree-Introduction](notebooks/SparkDensityTree-Introduction.md)
-
-- [SparkDensityTree-Regression-Analysis-Tools](notebooks/SparkDensityTree-Regression-Analysis-Tools.md)
+- ...
+- ...
 
 
 ## Support
