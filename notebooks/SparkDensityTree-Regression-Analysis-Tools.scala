@@ -2,9 +2,9 @@
 // MAGIC %md
 // MAGIC ## **Regression Analysis**: Some common tools
 // MAGIC
-// MAGIC This project was supported by Combient Mix AB through 2023 summer internship in Data Engineering Sciences to Axel Sandstedt.
+// MAGIC This project was partly supported by Combient Mix AB through 2023 summer internship in Data Engineering Sciences to Axel Sandstedt and a grant from Wallenberg AI, Autonomous Systems and Software Program funded by Knut and Alice Wallenberg Foundation to Raazesh Sainudiin.
 // MAGIC
-// MAGIC We go through how to apply some common regression analysis tools within the **SparkDensityTree** library. The tools under consideration are: conditional densities, marginalization of densities, coverage regions, sampling and prediction.
+// MAGIC We go through how to apply some common regression analysis tools within the **SparkDensityTree** library. The tools under consideration are: conditional densities, marginalization of densities, highest density regions, sampling and prediction.
 
 // COMMAND ----------
 
@@ -40,7 +40,20 @@ val mdeHistPath = rootPath + "mdeHist"
 // COMMAND ----------
 
 val treeVec : Array[Vector[Double]] = spark.read.parquet(treePath).as[Vector[Double]].collect
-val tree : WidestSplitTree = widestSideTreeRootedAt(Rectangle(treeVec(0), treeVec(1)))
+  val lowArr : Array[Double] = new Array(5)
+  val highArr : Array[Double] = new Array(5)
+  for (j <- 0 to 4) {
+    if(treeVec(0)(j) < treeVec(1)(j)) {
+      lowArr(j) = treeVec(0)(j)
+      highArr(j) = treeVec(1)(j)
+    } else {
+      lowArr(j) = treeVec(1)(j)
+      highArr(j) = treeVec(0)(j)
+    }
+  }
+
+  val tree = widestSideTreeRootedAt(Rectangle(lowArr.toVector, highArr.toVector))
+
 val finestResDepth : Int = spark.read.parquet(finestResDepthPath).as[Depth].collect()(0) 
 
 // COMMAND ----------
@@ -206,69 +219,69 @@ val margin135 = marginalize(density, axesToKeep135).normalize
 
 // MAGIC %md
 // MAGIC #### Getting coverage regions using the estimate
-// MAGIC One thing of interest in regression analysis is to calculate **coverage** or **confidence regions**. Our estimate provides a simple way of calculating coverage regions for many
-// MAGIC  confidence values.
-// MAGIC Suppose that all leaves are sorted \\(l_1,\dots,l_n\\) according to their density values high to low. Let \\(p_k\\) denote the probability of leaf \\(l_k\\). The coverage regions we retrieve will then look like: 
+// MAGIC One thing of interest in regression analysis is to calculate **highest density regions**. Our estimate provides a simple way of calculating highest density regions for many
+// MAGIC probabilities.
+// MAGIC Suppose that all leaves are sorted \\(l_1,\dots,l_n\\) according to their density values high to low. Let \\(p_k\\) denote the probability of leaf \\(l_k\\). The highest density regions we retrieve will then look like: 
 // MAGIC
 // MAGIC $$\bigg[\ [ \\{l_1\\}, p_1 ], [ \\{l_1, l_2\\}, p_1 + p_2 ], \dots,[\\{l_k : 1 \leq k \leq n\\}, \sum_{k=1}^n p_k]\ \bigg]$$
 // MAGIC
-// MAGIC Suppose that we are interesed in the smallest coverage region with probability \\(\geq\\) 0.95. 
+// MAGIC Suppose that we are interesed in the smallest region with probability \\(\geq\\) 0.95. 
 
 // COMMAND ----------
 
-val wantedConfidence : Double = 0.95
-
-// COMMAND ----------
-
-// MAGIC %md
-// MAGIC The generated coverage regions can be found in `coverageRegions`.
-
-// COMMAND ----------
-
-  val coverageRegions : TailProbabilities = conditional.tailProbabilities
+val wantedProbability : Double = 0.95
 
 // COMMAND ----------
 
 // MAGIC %md
-// MAGIC To get the smallest coverage region, or confidence region, with a given minimum probability or confidence, we can call the method `confidenceRegion`. The method returns the
+// MAGIC The generated highest density regions can be found in `highestDensityRegions`.
+
+// COMMAND ----------
+
+  val highestDensityRegions : TailProbabilities = conditional.tailProbabilities
+
+// COMMAND ----------
+
+// MAGIC %md
+// MAGIC To get the smallest region with a given minimum probability, we can call the method `confidenceRegion`. The method returns the
 // MAGIC region's probability.
 
 // COMMAND ----------
 
-val actualConfidence : Double = coverageRegions.confidenceRegion(wantedConfidence)
-assert(actualConfidence >= wantedConfidence)
-println(actualConfidence)
+val actualProbability : Double = highestDensityRegions.confidenceRegion(wantedProbability)
+assert(actualProbability >= wantedProbability)
+println(actualProbability)
 
 // COMMAND ----------
 
 // MAGIC %md
-// MAGIC Suppose we are wondering if the point 1.0 is contained within our confidence region.
-// MAGIC We first convert the point to a Vector and the pass it to the coverageRegion query method. The return value `coverageRegionProbability` is equal to the probability of the smallest
-// MAGIC coverage region in the above collection than contains our point 1.0.
+// MAGIC Suppose we are wondering if the point 1.0 is contained within our region.
+// MAGIC We first convert the point to a Vector and the pass it to the higestDensityRegions query method. The return value `regionProbability` is equal to the probability of the smallest
+// MAGIC highest density region in the above collection than contains our point 1.0.
 
 // COMMAND ----------
 
 import org.apache.spark.mllib.linalg.{ Vector => MLVector, _ }
-val coverageRegionProbability : Double = coverageRegions.query(Vectors.dense(1.0))
+val regionProbability : Double = highestDensityRegions.query(Vectors.dense(1.0))
 
 // COMMAND ----------
 
 // MAGIC %md
-// MAGIC To check if the points lies within the confidence region, we simply check if its probability is \\(\leq\\) the confidence region's probability.
+// MAGIC To check if the points lies within the 95% region, we simply check if its probability is \\(\leq\\) the region's probability.
 
 // COMMAND ----------
 
-if (coverageRegionProbability <= actualConfidence) {
-  println("The point is within an estimated 95%-confidence region!")
+if (regionProbability <= actualProbability) {
+  println("The point is within the estimated 95%-highest density region!")
 } else {
-  println("The point is not within an estimated 95%-confidence region!")
+  println("The point is not within the estimated 95%-highest density region!")
 }
 
 // COMMAND ----------
 
 // MAGIC %md
 // MAGIC We generate some new
-// MAGIC data from the underlying distribution and check how the points are distributed among our coverage regions.
+// MAGIC data from the underlying distribution and check how the points are distributed among our highest density regions.
 
 // COMMAND ----------
 
@@ -285,11 +298,11 @@ val testData : Array[MLVector] = normalVectorRDD(spark.sparkContext, numPoints, 
 // COMMAND ----------
 
 /* (Probability, Count) */
-var bins : Array[(Double, Count)] = coverageRegions.tails.vals.sorted.map((_, 0L)).toArray
+var bins : Array[(Double, Count)] = highestDensityRegions.tails.vals.sorted.map((_, 0L)).toArray
 for (i <- 0 until testData.length) {
-  val coverageRegionProb : Double = coverageRegions.query(testData(i))
+  val regionProb : Double = highestDensityRegions.query(testData(i))
   for (k <- 0 until bins.length) {
-    if (coverageRegionProb <= bins(k)._1) {
+    if (regionProb <= bins(k)._1) {
       bins(k) = (bins(k)._1, bins(k)._2 + 1)
     }
   }
@@ -298,7 +311,7 @@ for (i <- 0 until testData.length) {
 // COMMAND ----------
 
 // MAGIC %md
-// MAGIC We print out each coverage region's probability and the proportion of generated points found within the region:
+// MAGIC We print out each region's probability and the proportion of generated points found within the region:
 
 // COMMAND ----------
 
@@ -308,11 +321,11 @@ proportions.foreach(t => println("(Probability, Proportion): (" + t._1 + ", " + 
 // COMMAND ----------
 
 // MAGIC %md
-// MAGIC **Note** that getting coverage regions for multivariate estimates works exactly the same:
+// MAGIC **Note** that getting highest density regions for multivariate estimates works exactly the same:
 
 // COMMAND ----------
 
-  val coverageRegions25 : TailProbabilities = conditional25.tailProbabilities
+  val highestDensityRegions25 : TailProbabilities = conditional25.tailProbabilities
 
 // COMMAND ----------
 
@@ -392,3 +405,7 @@ val slicePoint25 : Vector[Double] = Vector(0.1, 0.3, 0.4)
 val conditional25 = quickSlice(density, sliceAxes25, slicePoint25, splitOrder, sliceLeavesBuf, sliceValuesBuf)
 val prediction25 = conditional25.sample(rng, 1)
 println(prediction25)
+
+// COMMAND ----------
+
+
