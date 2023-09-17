@@ -2,7 +2,7 @@
 // MAGIC %md
 // MAGIC ## Distributed Computation of Minimum Distance Histograms
 // MAGIC
-// MAGIC This project was supported by Combient Mix AB through 2023 summer internship in Data Engineering Sciences to Axel Sandstedt.
+// MAGIC This project was partly supported by Combient Mix AB through 2023 summer internship in Data Engineering Sciences to Axel Sandstedt and a grant from Wallenberg AI, Autonomous Systems and Software Program funded by Knut and Alice Wallenberg Foundation to Raazesh Sainudiin.
 // MAGIC
 // MAGIC This Notebook sets out to give a introduction and guide for how to use the [**SparkDensityTree**](https://github.com/lamastex/SparkDensityTree) estimator, a histogram estimator with performance guarantees for any density \\(f\\). For any details regarding the
 // MAGIC mathematics, or any of the other theoretical underpinnings, we shall refer to the relevant paper, and as such, will focus on the more practical aspects for constructing an estimate. What challenges that entail we will get into soon.
@@ -24,12 +24,12 @@
 // MAGIC are called **Mapped Regular Pavings**. **Statistical Regular Pavings** are mapped regular pavings mapping the nodes into \\(\mathbb{Z}_{\geq 0}\\).
 // MAGIC
 // MAGIC What we seek is a histogram density estimate that minimizes the \\(L_1\\)-distance to the true underlying density \\(f\\). The perhaps most important aspect in this search is to determine the most refined
-// MAGIC histogram we are considering. This is where the count limit comes in. The user will set a count limit which the library use to find the coarsest histogram whose cells contain counts that do not exceed the limit. The count of a cell refers to the number of training datapoints found within the cell. Therefore the count limit is a kind of smoothing parameter.
+// MAGIC histogram we are considering. This is where the count limit comes in. The user will set a count limit which the library uses to find the coarsest histogram whose cells contain counts that do not exceed the limit. The count of a cell refers to the number of training datapoints found within the cell. Therefore the count limit is a kind of smoothing parameter.
 // MAGIC
 // MAGIC Now, the count limit does not fully determine our final estimate; it just defines the most refined histogram we are willing to look at. Special methods is then applied to search in the range of coarser histograms
 // MAGIC for a suitable estimate, the minimum distance estimate.
 // MAGIC
-// MAGIC For understanding the distributed ideas that this library implements, see papers [Scalable Multivariate Histograms](http://lamastex.org/preprints/20180506_SparkDensityTree.pdf), [Scalable Algorithms in Nonparametric Computational Statistics](https://uu.diva-portal.org/smash/record.jsf?aq2=%5B%5B%5D%5D&c=1&af=%5B%5D&searchType=UNDERGRADUATE&sortOrder2=title_sort_asc&language=en&pid=diva2%3A1711540&aq=%5B%5B%7B%22freeText%22%3A%22Scalable+Algorithms+in+Nonparametric%22%7D%5D%5D&sf=all&aqe=%5B%5D&sortOrder=author_sort_asc&onlyFullText=false&noOfRows=50&dswid=-2058) and [Scalable Nonparametric L1 Density Estimation via Sparse Subtree Partitioning]().
+// MAGIC For understanding the distributed ideas that this library implements, see papers [Scalable Multivariate Histograms](http://lamastex.org/preprints/20180506_SparkDensityTree.pdf), [Scalable Algorithms in Nonparametric Computational Statistics](https://uu.diva-portal.org/smash/record.jsf?aq2=%5B%5B%5D%5D&c=1&af=%5B%5D&searchType=UNDERGRADUATE&sortOrder2=title_sort_asc&language=en&pid=diva2%3A1711540&aq=%5B%5B%7B%22freeText%22%3A%22Scalable+Algorithms+in+Nonparametric%22%7D%5D%5D&sf=all&aqe=%5B%5D&sortOrder=author_sort_asc&onlyFullText=false&noOfRows=50&dswid=-2058) and [Scalable Nonparametric L1 Density Estimation via Sparse Subtree Partitioning](https://github.com/lamastex/2023-mastersthesis-AxelSandstedt).
 // MAGIC
 // MAGIC For more information about **Regular Pavings**, see [Mapped Regular Pavings](https://interval.louisiana.edu/reliable-computing-journal/volume-16/reliable-computing-16-pp-252-282.pdf).
 
@@ -38,15 +38,14 @@
 // MAGIC %md
 // MAGIC #### Strengths and Weaknesses
 // MAGIC We first consider some **strengths**:
-// MAGIC   * Works for any continuous \\(X^d \in L_1\\) with density \\( f \\)
+// MAGIC   * Can estimate any unknown density \\( f \in L_1\\), i.e., the distribution of any continuous random variable \\(X^d\\). 
 // MAGIC   * Easily understandable evaluation of performance using the \\(L_1\\)-error \\( \int_{\mathbb{R}} \big|f^* - f\big| \\)
 // MAGIC   * Made to be **scalable**, constructed for distributed data sets. 
-// MAGIC   * Strict arithmetic imposed by the spltting rules of **_Regular Pavings_** enables us to construct useful tools; we can generate conditional distributions on arbitrary points in any set of arbitrary dimensions.  We can easily construct coverage or confidence regions. Furthermore, we can efficiently sample from the estimate's distribution.
+// MAGIC   * Strict arithmetic imposed by the spltting rules of **_Regular Pavings_** enables us to construct useful tools; we can generate conditional distributions on arbitrary points in any set of arbitrary dimensions.  We can easily construct highest density regions with specific probabilities. Furthermore, we can efficiently sample from the estimate's distribution itself, or any conditional or marginal distribution estimate derived form it.
 // MAGIC
 // MAGIC Next are some **weaknesses**:
 // MAGIC   * Hard to construct an estimate; there are several parameters (with both **statistical** and **practical** implications) which the user has to manually adjust for any specific use case.
 // MAGIC   * The construction of the estimate can be seen as a 4-stage process in which 3 of the stages requires the user to get their hands dirty.
-// MAGIC   * Currently limited by memory issues, but we have some ideas for how to solve this.
 
 // COMMAND ----------
 
@@ -167,7 +166,8 @@ import org.apache.spark.mllib.random.RandomRDDs.normalVectorRDD
 import org.apache.spark.mllib.linalg.{ Vector => MLVector, _ }
 
 val trainingRDD : RDD[MLVector] = normalVectorRDD(spark.sparkContext, trainSize, dimensions, numPartitions, 1230568)
-val validationRDD : RDD[MLVector] = normalVectorRDD(spark.sparkContext, trainSize/2, dimensions, numPartitions, 5465694)
+val validationSize = trainSize/2
+val validationRDD : RDD[MLVector] = normalVectorRDD(spark.sparkContext, validationSize, dimensions, numPartitions, 5465694)
 
 // COMMAND ----------
 
@@ -197,34 +197,34 @@ val tree : WidestSplitTree = widestSideTreeRootedAt(rootBox)
 // COMMAND ----------
 
 // MAGIC %md
-// MAGIC The specific **depth** one should choose depends fully on the user's data. The user must in some way using a rule-of-thumb determine at what depth the data will be sufficiently sparse among the cells, 
-// MAGIC and not exceed the future **count limit** in **stage 3**. However, all is not bad, since going to a very refined and large depth will fortunately only increase the memory usage of the `NodeLabel` case class
-// MAGIC by a little, since every new depth means that we need 1 more bit in the NodeLabel, quite small. 
+// MAGIC The specific **depth** one should choose depends fully on the user's data. The user must in some way using a rule-of-thumb determine a suitable depth at which data will be sufficiently sparse among the cells. 
 // MAGIC
-// MAGIC In our example we can cheat slightly; we already know the distribution. The rule-of-thumb we use says: Find the smallest depth such that every cell's sides does not exceed a given length, 
+// MAGIC The rule-of-thumb we use says: Find the smallest depth such that every cell's sides does not exceed a given length, 
 // MAGIC `finestResSideLength` in the code. The second line of code calculated the given depth using some intimidating scala code. Now we have our `finestResDepth`.
 
 // COMMAND ----------
 
-val finestResSideLength = 1e-5
+val finestResSideLength = 1e-2
 val finestResDepth : Int = tree.descendBoxPrime(Vectors.dense(rootBox.low.toArray)).dropWhile(_._2.widths.max > finestResSideLength).head._1.depth
 
 // COMMAND ----------
 
 // MAGIC %md
 // MAGIC Now that we have our wanted **depth** we wish to work up from, we must for each data point find what cell it resides in. We then sum up and calculate the final count for our cells, and **stage 2**
-// MAGIC is completed. Since points residing in the same cell may be found on different machines at this point in time, we must apply an **all-to-all** communication pattern to do the summation. We cache `countedValidation` since we will reuse it several times in **stage 4**.
+// MAGIC is completed. Since points residing in the same cell may be found on different machines at this point in time, we must apply an **all-to-all** communication pattern to do the summation.
+// MAGIC
+// MAGIC The validation data does not have to be reduced by key; the optimized quickToLabeledNoReduce method should be used.
 
 // COMMAND ----------
 
-var countedTrain : RDD[(NodeLabel, Count)] = quickToLabeled(tree, finestResDepth, trainingRDD)
-var countedValidation : RDD[(NodeLabel, Count)] = quickToLabeled(tree, finestResDepth, validationRDD).cache   
+var countedTrain : RDD[(NodeLabel, Count)] = quickToLabeled(tree, finestResDepth, trainingRDD).cache
+var countedValidation : RDD[(NodeLabel, Count)] = quickToLabeledNoReduce(tree, finestResDepth, validationRDD)
 
 // COMMAND ----------
 
 // MAGIC %md
 // MAGIC We have now reached **stage 3**, perhaps the most error-prone part of the library. At this point in the process, we have in storage non-zero **count** cells at some very low **depth**.
-// MAGIC We wish to create the coarsest histogram with no cell containing a count _larger than the **count limit**_ defined by the user. In our distributed setting this operation can be reduced to a single **all-to-all**
+// MAGIC We wish to create the coarsest histogram with no cell containing a count _larger than the **count limit**_ defined by the user and/or the data. In our distributed setting this operation can be reduced to a single **all-to-all**
 // MAGIC communication pattern, in which we distribute the data between our workers such that every worker **owns** or stores whole **branches** of the tree which it can safely work within.
 // MAGIC
 // MAGIC In order to **estimate** how the data is distributed between branches of our binary tree, the **driver** need to sample data from all workers. The user's first two responsibilities here is to determine
@@ -279,10 +279,15 @@ val depthLimit = partitioner.maxSubtreeDepth
 // MAGIC %md
 // MAGIC The last parameter the user have to set is `countLimit`. The value acts as a smoothing parameter for our histogram and a smaller limit gives a more refined histogram. This histogram will act as the end of the path of increasingly refined histograms in which we will search for a final estimate in **stage 4**. Furthermore, a larger limit affects the memory usage of the library, and is currently acting as the
 // MAGIC limiting factor in **stage 4**. There are possible solutions that can be applied here and implementing this would be the next step to take for developing the library.
+// MAGIC
+// MAGIC We note once again that no input leaf is allowed to have a count exceeding the count limit. **getCountLimit** takes as input the RDD of leaves and a  minimum count limit we want,
+// MAGIC  and if we find some maximum leaf
+// MAGIC  containing a count exceeding the minimum, we return that as a count limit instead. The returned count limit is guaranteed to work in the merging step.
 
 // COMMAND ----------
 
-val countLimit : Int = 400 
+val minimumCountLimit : Int = 400
+val countLimit = getCountLimit(countedTrain, minimumCountLimit)
 
 // COMMAND ----------
 
@@ -293,11 +298,12 @@ val countLimit : Int = 400
 // COMMAND ----------
 
 val finestHistogram : Histogram = mergeLeavesHistogram(tree, subtreeRDD, countLimit, depthLimit)
+countedTrain.unpersist()
 
 // COMMAND ----------
 
 // MAGIC %md
-// MAGIC The **final stage** is now upon us. At this point, there is only a single parameter left that the user must set. Remember that we do an adaptive search along a path of increasingly refined histograms.
+// MAGIC The **final stage** is now upon us. At this point, there are only two parameters left that the user must set. Remember that we do an adaptive search along a path of increasingly refined histograms.
 // MAGIC In every iteration we choose \\(k\\) points evenly distributed along a range of histograms on this path and find the minimum distance estimate within the set of chosen histograms.
 // MAGIC The user simply has to choose the value of \\(k\\). In the previous **Theorem**, we saw how \\(k = \big|\Theta\big|\\) affects the statistical performance. We cannot choose to large a \\(k\\) since a
 // MAGIC part of **stage 4** scales quadratically in computational cost in relation to the constant. We set `kInMDE` to 10.
@@ -309,12 +315,12 @@ val kInMDE = 10
 // COMMAND ----------
 
 // MAGIC %md
-// MAGIC Here we set a some default spark parallelism value, which is required for a certain part of **stage 4**. This should and will probably be removed soon. For now, you can set it to
-// MAGIC the number of partitions used in the merging stage or perhaps to the number of cores in your network.
+// MAGIC The user must also set `numCores` to the number of **cores** used in the cluster. **stage 4** needs this value set as it is the number of partitions it will use internally after a
+// MAGIC reduceByKey call in order to achieve good performance.
 
 // COMMAND ----------
 
-spark.conf.set("spark.default.parallelism", numPartitions.toString)
+val numCores = 4
 
 // COMMAND ----------
 
@@ -323,7 +329,7 @@ spark.conf.set("spark.default.parallelism", numPartitions.toString)
 
 // COMMAND ----------
 
-val minimumDistanceHistogram : Histogram = getMDE(finestHistogram, countedValidation, kInMDE, true)
+val minimumDistanceHistogram : Histogram = getMDE(finestHistogram, countedValidation, validationSize, kInMDE, numCores, true)
 
 // COMMAND ----------
 
