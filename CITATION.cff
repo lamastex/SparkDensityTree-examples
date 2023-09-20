@@ -1,0 +1,39 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: "SparkDensityTree-examples: User-guide with examples for SparkDensityTree library"
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Axel
+    email: axel.sandstedt97@protonmail.com
+    family-names: Sandstedt
+  - given-names: Johannes
+    email: johannes.graner@gmail.com
+    family-names: Graner
+  - given-names: Tilo
+    email: tilo@noteventi.me
+    family-names: Wiklund
+  - given-names: Raazesh
+    email: raazesh.sainudiin@gmail.com
+    family-names: Sainudiin
+    orcid: 'https://orcid.org/0000-0003-3265-5565'
+repository-code: 'https://github.com/lamastex/SparkDensityTree'
+abstract: >-
+  This is the user-guide with examples for the library based on Scala and Apache Spark for scalable 
+  density estimation, anomaly detection and conditional density regression with 
+  universal performance guarantees using distributed sparse binary trees. 
+  The order of authorship is reverse chronological.
+keywords:
+  - nonparametric density estimation
+  - nonparametric anomaly detection
+  - conditional density regression
+  - sparse binary tree arithmetic
+  - Apache Spark
+  - Scala
+license: Apache-2.0
+version: '1.0'
+date-released: '2023-09-05'
